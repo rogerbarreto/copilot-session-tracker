@@ -28,17 +28,30 @@ the app filters them out.
     reflects real work far better than the folder/DB `updated_at` (that gets bulk-bumped
     whenever the CLI syncs). Sessions with no turns fall back to `updated_at`.
 - **Terminal** button — opens a *standalone* terminal (Windows Terminal if available,
-  otherwise `cmd.exe`) and resumes that session in **yolo mode**:
+  otherwise `cmd.exe`) that runs a **configurable command template** for the session.
+  The template is edited in the **Settings** dialog (⚙ button, top-right) and persisted;
+  it supports two tokens:
+  - `{id}` — the session id
+  - `{cwd}` — the session's working directory
+
+  Everything else is passed through verbatim, so you can add any flags you like. The
+  default is:
 
   ```text
-  copilot --resume=<session-id> --yolo
+  copilot --resume={id} --yolo --prefer-version 1.0.60
   ```
 
+  (`--prefer-version` pins the CLI version the terminal launches; drop it or change the
+  version as needed. Use **Reset to default** in Settings to restore it.)
+
 - **Peek** button — a quick look at a session without opening it: **created** /
-  **updated** timestamps, the number of turns, and the **last 5 user → assistant round
-  trips**.
+  **last-activity** timestamps, the number of turns, and the **last 5 user → assistant
+  round trips**.
 - **Search** box to filter by name, id, working directory or repository.
 - **Refresh** to reload after new sessions appear.
+
+Settings (the command template) are stored in
+`%LOCALAPPDATA%\CopilotSessionTracker\settings.json`.
 
 ## Requirements
 
@@ -90,6 +103,7 @@ src/CopilotSessionTracker/
   Services/
     SessionStore.cs          Reads session-state folders + session-store.db
     DatabaseSnapshot.cs      Safe read-only snapshot of the live SQLite DB
-    TerminalLauncher.cs      Launches copilot --resume=<id> --yolo
+    TerminalLauncher.cs      Runs the configurable command template in a terminal
+    AppSettings.cs           Persists the command template (LOCALAPPDATA JSON)
   ViewModels/MainViewModel.cs
 ```

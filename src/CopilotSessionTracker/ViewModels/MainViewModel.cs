@@ -13,6 +13,7 @@ namespace CopilotSessionTracker.ViewModels;
 public sealed partial class MainViewModel : ObservableObject
 {
     private readonly SessionStore _store = new();
+    private readonly AppSettings _settings = AppSettings.Load();
     private IReadOnlyList<SessionInfo> _all = Array.Empty<SessionInfo>();
 
     [ObservableProperty]
@@ -27,15 +28,29 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty]
     public partial string SearchText { get; set; }
 
+    /// <summary>
+    /// Editable command template used by the Terminal button. Supports the tokens
+    /// <c>{id}</c> and <c>{cwd}</c>; persisted across restarts.
+    /// </summary>
+    [ObservableProperty]
+    public partial string CommandTemplate { get; set; }
+
     public MainViewModel()
     {
         Sessions = new ObservableCollection<SessionInfo>();
         SearchText = string.Empty;
+        CommandTemplate = _settings.CommandTemplate;
 
         // Give a helpful message immediately if the store is missing.
         StatusText = _store.DatabaseExists
             ? "Loading…"
             : $"session-store.db not found under {_store.SessionStateDir}";
+    }
+
+    partial void OnCommandTemplateChanged(string value)
+    {
+        _settings.CommandTemplate = value;
+        _settings.Save();
     }
 
     [RelayCommand]

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using CopilotSessionTracker.Models;
 using CopilotSessionTracker.Services;
 using CopilotSessionTracker.ViewModels;
@@ -7,10 +8,12 @@ using Microsoft.UI;
 using Microsoft.UI.Text;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Graphics;
+using Color = Windows.UI.Color;
 
 namespace CopilotSessionTracker;
 
@@ -22,13 +25,13 @@ public sealed partial class MainWindow : Window
     {
         this.InitializeComponent();
         Title = "Copilot Session Tracker";
-        SetupWindow(1180, 860);
+        SetupWindow();
 
         // Kick off the initial load once the window is up.
         _ = ViewModel.RefreshAsync();
     }
 
-    private void SetupWindow(int width, int height)
+    private void SetupWindow()
     {
         try
         {
@@ -40,14 +43,33 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
+            var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+            if (File.Exists(iconPath))
+            {
+                appWindow.SetIcon(iconPath);
+            }
+
+            if (Content is FrameworkElement root)
+            {
+                ApplyTitleBarTheme(appWindow.TitleBar, root.ActualTheme);
+                root.ActualThemeChanged += (_, _) =>
+                    ApplyTitleBarTheme(appWindow.TitleBar, root.ActualTheme);
+            }
+
+            // Size to 50% of the current display's work area (with sane minimums).
+            var area = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Primary);
+            var work = area?.WorkArea;
+
+            var width = work is { } w ? Math.Max(900, w.Width / 2) : 1180;
+            var height = work is { } h ? Math.Max(640, h.Height / 2) : 860;
+
             appWindow.Resize(new SizeInt32(width, height));
 
-            // Center on the display that contains the window.
-            var area = DisplayArea.GetFromWindowId(windowId, DisplayAreaFallback.Primary);
-            if (area is not null)
+            // Center on that display.
+            if (work is { } r)
             {
-                var x = area.WorkArea.X + Math.Max(0, (area.WorkArea.Width - width) / 2);
-                var y = area.WorkArea.Y + Math.Max(0, (area.WorkArea.Height - height) / 2);
+                var x = r.X + Math.Max(0, (r.Width - width) / 2);
+                var y = r.Y + Math.Max(0, (r.Height - height) / 2);
                 appWindow.Move(new PointInt32(x, y));
             }
         }
@@ -55,6 +77,40 @@ public sealed partial class MainWindow : Window
         {
             // Non-fatal: keep default size/position if the platform rejects the calls.
         }
+    }
+
+    private static void ApplyTitleBarTheme(AppWindowTitleBar titleBar, ElementTheme theme)
+    {
+        var dark = theme == ElementTheme.Dark;
+
+        var background = dark
+            ? Color.FromArgb(255, 32, 32, 32)
+            : Color.FromArgb(255, 243, 243, 243);
+        var foreground = dark
+            ? Color.FromArgb(255, 249, 249, 249)
+            : Color.FromArgb(255, 27, 27, 27);
+        var inactiveForeground = dark
+            ? Color.FromArgb(255, 160, 160, 160)
+            : Color.FromArgb(255, 96, 96, 96);
+        var hover = dark
+            ? Color.FromArgb(255, 51, 51, 51)
+            : Color.FromArgb(255, 229, 229, 229);
+        var pressed = dark
+            ? Color.FromArgb(255, 61, 61, 61)
+            : Color.FromArgb(255, 216, 216, 216);
+
+        titleBar.BackgroundColor = background;
+        titleBar.ForegroundColor = foreground;
+        titleBar.InactiveBackgroundColor = background;
+        titleBar.InactiveForegroundColor = inactiveForeground;
+        titleBar.ButtonBackgroundColor = background;
+        titleBar.ButtonForegroundColor = foreground;
+        titleBar.ButtonInactiveBackgroundColor = background;
+        titleBar.ButtonInactiveForegroundColor = inactiveForeground;
+        titleBar.ButtonHoverBackgroundColor = hover;
+        titleBar.ButtonHoverForegroundColor = foreground;
+        titleBar.ButtonPressedBackgroundColor = pressed;
+        titleBar.ButtonPressedForegroundColor = foreground;
     }
 
     private void OpenTerminal_Click(object sender, RoutedEventArgs e)
@@ -66,11 +122,61 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            TerminalLauncher.OpenSession(session);
+            TerminalLauncher.OpenSession(session, ViewModel.CommandTemplate);
         }
         catch (Exception ex)
         {
             _ = ShowMessageAsync("Could not open terminal", ex.Message);
+        }
+    }
+
+    private async void Settings_Click(object sender, RoutedEventArgs e)
+    {
+        var templateBox = new TextBox
+        {
+            FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+            Text = ViewModel.CommandTemplate,
+            AcceptsReturn = false,
+            TextWrapping = TextWrapping.Wrap,
+            PlaceholderText = TerminalLauncher.DefaultCommandTemplate,
+        };
+        AutomationProperties.SetName(templateBox, "Terminal command template");
+
+        var panel = new StackPanel { Spacing = 8, MinWidth = 520 };        panel.Children.Add(new TextBlock
+        {
+            Text = "Command run by the Terminal button. Tokens: {id} = session id, "
+                 + "{cwd} = working directory. Everything else is passed through verbatim "
+                 + "(e.g. --yolo, --prefer-version <v>).",
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+        });
+        panel.Children.Add(templateBox);
+
+        var dialog = new ContentDialog
+        {
+            Title = "Settings",
+            Content = panel,
+            PrimaryButtonText = "Save",
+            SecondaryButtonText = "Reset to default",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = Content.XamlRoot,
+        };
+
+        // "Reset to default" should repopulate the box without closing the dialog.
+        dialog.SecondaryButtonClick += (_, args) =>
+        {
+            args.Cancel = true;
+            templateBox.Text = TerminalLauncher.DefaultCommandTemplate;
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary)
+        {
+            var value = templateBox.Text?.Trim();
+            ViewModel.CommandTemplate = string.IsNullOrEmpty(value)
+                ? TerminalLauncher.DefaultCommandTemplate
+                : value;
         }
     }
 

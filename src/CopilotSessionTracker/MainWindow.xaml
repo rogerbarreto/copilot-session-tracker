@@ -32,6 +32,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <Button Grid.Column="0" Command="{x:Bind ViewModel.RefreshCommand}"
@@ -52,6 +53,15 @@
             <TextBlock Grid.Column="3" VerticalAlignment="Center"
                        Text="{x:Bind ViewModel.StatusText, Mode=OneWay}"
                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+            <Button Grid.Column="4" Click="Settings_Click"
+                    AutomationProperties.Name="Settings"
+                    ToolTipService.ToolTip="Configure the terminal command">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE713;" FontSize="14" />
+                    <TextBlock Text="Settings" />
+                </StackPanel>
+            </Button>
         </Grid>
 
         <!-- Table header -->
@@ -151,6 +161,6 @@
         <TextBlock Grid.Row="4"
                    Style="{ThemeResource CaptionTextBlockStyle}"
                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                   Text="Terminal resumes the session with: copilot --resume=&lt;id&gt; --yolo" />
+                   Text="Terminal runs the configured command (Settings) with {id}/{cwd} substituted in a new window." />
     </Grid>
 </Window>
