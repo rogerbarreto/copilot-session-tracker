@@ -10,7 +10,10 @@ public sealed class SessionInfo
 {
     public required string Id { get; init; }
 
-    /// <summary>Human-friendly session name (the DB "summary"); falls back to "(unnamed session)".</summary>
+    /// <summary>
+    /// Human-friendly session name from <c>workspace.yaml</c> (what Copilot CLI shows), with
+    /// <c>session-store.db</c> "summary" as a fallback for auto-titled sessions.
+    /// </summary>
     public string Name { get; init; } = "(unnamed session)";
 
     public string WorkingDirectory { get; init; } = string.Empty;

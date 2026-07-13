@@ -18,7 +18,8 @@ the app filters them out.
 ## Features
 
 - **Session table** — one row per local session showing:
-  - **Session name** (the CLI "summary"; `(unnamed session)` if none) with the
+  - **Session name** (from `workspace.yaml`, matching what Copilot CLI shows; falls back to
+    the DB `summary` for auto-titled sessions; `(unnamed session)` if none) with the
     **working directory** as a small line beneath it (repository is shown in the tooltip)
   - **Session id** — a short id shown as a clickable link; **click it to copy the full
     GUID to the clipboard** (a brief "Copied!" confirmation appears)
@@ -93,9 +94,19 @@ consistent snapshot without contending with the CLI, the app copies the database
 `FileShare.ReadWrite`), reads from the copy, and deletes it afterwards. It never writes
 to your real session store.
 
+## CI
+
+Pull requests and pushes to `main` run GitHub Actions on `windows-latest`:
+
+- `dotnet build src/CopilotSessionTracker/CopilotSessionTracker.csproj -c Release -r win-x64`
+- `dotnet test tests/CopilotSessionTracker.Tests/CopilotSessionTracker.Tests.csproj -c Release`
+
 ## Project layout
 
 ```text
+src/CopilotSessionTracker.Core/
+  SessionNameResolver.cs     Display-name logic shared with tests
+  WorkspaceYamlReader.cs     Reads flat workspace.yaml metadata
 src/CopilotSessionTracker/
   App.xaml(.cs)              Application entry point
   MainWindow.xaml(.cs)       Session table + Peek dialog
@@ -106,4 +117,7 @@ src/CopilotSessionTracker/
     TerminalLauncher.cs      Runs the configurable command template in a terminal
     AppSettings.cs           Persists the command template (LOCALAPPDATA JSON)
   ViewModels/MainViewModel.cs
+tests/CopilotSessionTracker.Tests/
+  SessionNameResolverTests.cs
+  WorkspaceYamlReaderTests.cs
 ```

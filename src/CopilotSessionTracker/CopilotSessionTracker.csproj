@@ -19,6 +19,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\CopilotSessionTracker.Core\CopilotSessionTracker.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Update="Assets\AppIcon.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

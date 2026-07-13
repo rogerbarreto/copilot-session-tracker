@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using CopilotSessionTracker.Core;
 using CopilotSessionTracker.Models;
 using Microsoft.Data.Sqlite;
 
@@ -166,15 +167,16 @@ public sealed class SessionStore
 
             turnStats.TryGetValue(id, out var stats);
             var summary = reader.IsDBNull(4) ? null : reader.GetString(4);
+            var workspace = ReadWorkspaceYaml(id);
             map[id] = new SessionInfo
             {
                 Id = id,
-                Name = string.IsNullOrWhiteSpace(summary) ? "(unnamed session)" : summary!,
-                WorkingDirectory = reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
-                Repository = reader.IsDBNull(2) ? null : reader.GetString(2),
-                Branch = reader.IsDBNull(3) ? null : reader.GetString(3),
-                CreatedAt = ParseTimestamp(reader.IsDBNull(5) ? null : reader.GetString(5)),
-                UpdatedAt = ParseTimestamp(reader.IsDBNull(6) ? null : reader.GetString(6)),
+                Name = SessionNameResolver.Resolve(id, summary, workspace),
+                WorkingDirectory = FirstNonEmpty(workspace.Cwd, reader.IsDBNull(1) ? null : reader.GetString(1)) ?? string.Empty,
+                Repository = FirstNonEmpty(workspace.Repository, reader.IsDBNull(2) ? null : reader.GetString(2)),
+                Branch = FirstNonEmpty(workspace.Branch, reader.IsDBNull(3) ? null : reader.GetString(3)),
+                CreatedAt = ParseTimestamp(FirstNonEmpty(workspace.CreatedAt, reader.IsDBNull(5) ? null : reader.GetString(5))),
+                UpdatedAt = ParseTimestamp(FirstNonEmpty(workspace.UpdatedAt, reader.IsDBNull(6) ? null : reader.GetString(6))),
                 LastInteractionAt = stats.LastTimestamp,
                 TurnCount = stats.Count,
             };
@@ -206,46 +208,26 @@ public sealed class SessionStore
 
     private SessionInfo LoadFromWorkspaceYaml(string id)
     {
-        var yamlPath = Path.Combine(_sessionStateDir, id, "workspace.yaml");
-        var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        if (File.Exists(yamlPath))
-        {
-            foreach (var line in File.ReadLines(yamlPath))
-            {
-                var separator = line.IndexOf(':');
-                if (separator <= 0)
-                {
-                    continue;
-                }
-
-                var key = line[..separator].Trim();
-                var value = line[(separator + 1)..].Trim().Trim('"');
-                if (!fields.ContainsKey(key))
-                {
-                    fields[key] = value;
-                }
-            }
-        }
-
-        fields.TryGetValue("cwd", out var cwd);
-        fields.TryGetValue("repository", out var repository);
-        fields.TryGetValue("branch", out var branch);
-        fields.TryGetValue("created_at", out var created);
-        fields.TryGetValue("updated_at", out var updated);
+        var workspace = ReadWorkspaceYaml(id);
 
         return new SessionInfo
         {
             Id = id,
-            Name = "(unnamed session)",
-            WorkingDirectory = cwd ?? string.Empty,
-            Repository = string.IsNullOrWhiteSpace(repository) ? null : repository,
-            Branch = string.IsNullOrWhiteSpace(branch) ? null : branch,
-            CreatedAt = ParseTimestamp(created),
-            UpdatedAt = ParseTimestamp(updated),
+            Name = SessionNameResolver.Resolve(id, dbSummary: null, workspace),
+            WorkingDirectory = workspace.Cwd ?? string.Empty,
+            Repository = string.IsNullOrWhiteSpace(workspace.Repository) ? null : workspace.Repository,
+            Branch = string.IsNullOrWhiteSpace(workspace.Branch) ? null : workspace.Branch,
+            CreatedAt = ParseTimestamp(workspace.CreatedAt),
+            UpdatedAt = ParseTimestamp(workspace.UpdatedAt),
             TurnCount = 0,
         };
     }
+
+    private WorkspaceMetadata ReadWorkspaceYaml(string id) =>
+        WorkspaceYamlReader.ReadFromSessionFolder(_sessionStateDir, id);
+
+    private static string? FirstNonEmpty(string? preferred, string? fallback) =>
+        !string.IsNullOrWhiteSpace(preferred) ? preferred : fallback;
 
     private static DateTimeOffset? ParseTimestamp(string? value)
     {
