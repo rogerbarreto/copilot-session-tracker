@@ -9,6 +9,7 @@ obj/
 
 ## Publish output
 publish/
+installer-output/
 *.pubxml.user
 
 ## Rider

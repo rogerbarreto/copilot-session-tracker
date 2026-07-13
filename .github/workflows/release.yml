@@ -1,0 +1,117 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: true
+      totp_code:
+        description: 'Certum 6-digit TOTP code for SimplySign'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+
+  sign-and-release:
+    needs: validate
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: [self-hosted, Windows, X64]
+    environment: release-signing
+
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Verify tag matches dispatch input
+        shell: pwsh
+        run: |
+          $tag = "${{ env.RELEASE_TAG }}"
+          if ($tag -notmatch '^v\d+\.\d+\.\d+') {
+            throw "Release tag must look like v1.2.3 (got '$tag')"
+          }
+          Write-Host "Releasing $tag"
+
+      - name: Publish app
+        shell: pwsh
+        run: ./scripts/publish.ps1 -OutputDir publish
+
+      - name: Authenticate SimplySign
+        shell: pwsh
+        run: |
+          ./scripts/signing/Ensure-SimplySignCertificate.ps1 -TotpCode "${{ github.event.inputs.totp_code }}"
+
+      - name: Sign portable EXE
+        shell: pwsh
+        run: ./scripts/signing/Sign-Authenticode.ps1 publish/CopilotSessionTracker.exe
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $version = "${{ env.RELEASE_TAG }}" -replace '^v',''
+          $iscc = "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
+          & $iscc "installer.iss" "/DMyAppVersion=$version"
+          if ($LASTEXITCODE -ne 0) { throw "Installer build failed" }
+
+      - name: Sign installer
+        shell: pwsh
+        run: ./scripts/signing/Sign-Authenticode.ps1 installer-output/CopilotSessionTracker-Setup.exe
+
+      - name: Create portable zip
+        shell: pwsh
+        run: |
+          $zip = "publish/CopilotSessionTracker-win-x64.zip"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path "publish/*" -DestinationPath $zip
+          Write-Host "Zip: $((Get-Item $zip).Length / 1MB) MB"
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ env.RELEASE_TAG }}"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release delete $tag --yes
+          }
+          $global:LASTEXITCODE = 0
+
+          gh release create $tag `
+            --title $tag `
+            --generate-notes `
+            "publish/CopilotSessionTracker-win-x64.zip" `
+            "installer-output/CopilotSessionTracker-Setup.exe"
+
+          Write-Host "Release $tag published."
+
+  tag-ready:
+    needs: validate
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ready for signing
+        run: |
+          echo "## Tag validated — run signing workflow" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Open **Actions → Release → Run workflow**" >> $GITHUB_STEP_SUMMARY
+          echo "2. Enter tag \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "3. Enter the current Certum TOTP code" >> $GITHUB_STEP_SUMMARY
+          echo "4. The self-hosted runner at \`D:\\actions-runner\` will publish, sign, and upload the release" >> $GITHUB_STEP_SUMMARY
