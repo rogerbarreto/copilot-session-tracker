@@ -54,6 +54,12 @@ the app filters them out.
 Settings (the command template) are stored in
 `%LOCALAPPDATA%\CopilotSessionTracker\settings.json`.
 
+## Download
+
+- [Latest release](../../releases/latest) — signed installer and portable ZIP (when published)
+- **Installer:** `CopilotSessionTracker-Setup.exe`
+- **Portable:** `CopilotSessionTracker-win-x64.zip`
+
 ## Requirements
 
 - Windows 10 (build 17763+) or Windows 11
@@ -78,12 +84,16 @@ pick `x64`, `x86` or `ARM64` from the platform dropdown).
 
 ### Publish a standalone build
 
-To produce a self-contained folder that runs without a separate Windows App SDK install:
+```powershell
+./scripts/publish.ps1
+# Output: ./publish/
+```
+
+### Local installer (unsigned)
 
 ```powershell
-cd src/CopilotSessionTracker
-dotnet publish -c Release -r win-x64 --self-contained true `
-  -p:WindowsAppSDKSelfContained=true -p:WindowsPackageType=None
+./install.ps1
+# Builds publish/ + installer-output/CopilotSessionTracker-Setup.exe
 ```
 
 ## How it reads the database safely
@@ -100,6 +110,57 @@ Pull requests and pushes to `main` run GitHub Actions on `windows-latest`:
 
 - `dotnet build src/CopilotSessionTracker/CopilotSessionTracker.csproj -c Release -r win-x64`
 - `dotnet test tests/CopilotSessionTracker.Tests/CopilotSessionTracker.Tests.csproj -c Release`
+
+## Release and code signing
+
+Releases follow the same pattern as [Copilot Booster](https://github.com/rogerbarreto/copilot-booster):
+validation runs on GitHub-hosted runners; signing and publishing run on your self-hosted
+runner with a manually entered Certum TOTP code (nothing sensitive is stored in the public
+repo).
+
+### One-time setup
+
+1. **Self-hosted runner** at `D:\actions-runner` (currently registered to
+   `copilot-booster-signing` — re-register it to this repo if you want both, use an org
+   runner instead):
+
+   ```powershell
+   cd D:\actions-runner
+   # Stop the service/interactive runner first, then:
+   .\config.cmd remove
+   .\config.cmd --url https://github.com/rogerbarreto/copilot-session-tracker --token <RUNNER_TOKEN>
+   .\run.cmd
+   ```
+
+   Generate `<RUNNER_TOKEN>` from **Settings → Actions → Runners → New self-hosted runner**.
+
+2. **Signing machine prerequisites** on that runner host:
+   - Certum SimplySign Desktop
+   - Inno Setup 6
+   - Windows SDK / Visual Studio build tools (`signtool.exe`)
+
+3. **Optional:** create a `release-signing` environment in GitHub (**Settings →
+   Environments**) if you want a manual approval gate before signing starts.
+
+### Release flow
+
+1. Merge to `main`.
+2. Bump `Version` in `src/CopilotSessionTracker/CopilotSessionTracker.csproj` if needed.
+3. Tag and push:
+
+   ```powershell
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+
+4. The `Release` workflow validates the tag (build + tests).
+5. Open **Actions → Release → Run workflow**:
+   - **tag:** `v1.0.0`
+   - **totp_code:** current 6-digit Certum code from SimplySign
+6. The self-hosted runner publishes, signs the EXE and installer, and creates the GitHub
+   Release with:
+   - `CopilotSessionTracker-Setup.exe` (signed)
+   - `CopilotSessionTracker-win-x64.zip` (signed portable build)
 
 ## Project layout
 
@@ -120,4 +181,9 @@ src/CopilotSessionTracker/
 tests/CopilotSessionTracker.Tests/
   SessionNameResolverTests.cs
   WorkspaceYamlReaderTests.cs
+scripts/
+  publish.ps1
+  build-installer.ps1
+  signing/                   Certum SimplySign + signtool helpers
+installer.iss                Inno Setup installer definition
 ```
