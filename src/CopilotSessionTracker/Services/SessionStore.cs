@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using CopilotSessionTracker.Core;
 using CopilotSessionTracker.Models;
 using Microsoft.Data.Sqlite;
 
@@ -170,7 +171,7 @@ public sealed class SessionStore
             map[id] = new SessionInfo
             {
                 Id = id,
-                Name = ResolveSessionName(id, summary, workspace),
+                Name = SessionNameResolver.Resolve(id, summary, workspace),
                 WorkingDirectory = FirstNonEmpty(workspace.Cwd, reader.IsDBNull(1) ? null : reader.GetString(1)) ?? string.Empty,
                 Repository = FirstNonEmpty(workspace.Repository, reader.IsDBNull(2) ? null : reader.GetString(2)),
                 Branch = FirstNonEmpty(workspace.Branch, reader.IsDBNull(3) ? null : reader.GetString(3)),
@@ -212,7 +213,7 @@ public sealed class SessionStore
         return new SessionInfo
         {
             Id = id,
-            Name = ResolveSessionName(id, dbSummary: null, workspace),
+            Name = SessionNameResolver.Resolve(id, dbSummary: null, workspace),
             WorkingDirectory = workspace.Cwd ?? string.Empty,
             Repository = string.IsNullOrWhiteSpace(workspace.Repository) ? null : workspace.Repository,
             Branch = string.IsNullOrWhiteSpace(workspace.Branch) ? null : workspace.Branch,
@@ -222,105 +223,11 @@ public sealed class SessionStore
         };
     }
 
-    private WorkspaceFields ReadWorkspaceYaml(string id)
-    {
-        var yamlPath = Path.Combine(_sessionStateDir, id, "workspace.yaml");
-        var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        if (File.Exists(yamlPath))
-        {
-            foreach (var line in File.ReadLines(yamlPath))
-            {
-                var separator = line.IndexOf(':');
-                if (separator <= 0)
-                {
-                    continue;
-                }
-
-                var key = line[..separator].Trim();
-                var value = line[(separator + 1)..].Trim().Trim('"');
-                if (!fields.ContainsKey(key))
-                {
-                    fields[key] = value;
-                }
-            }
-        }
-
-        fields.TryGetValue("name", out var name);
-        fields.TryGetValue("user_named", out var userNamed);
-        fields.TryGetValue("cwd", out var cwd);
-        fields.TryGetValue("repository", out var repository);
-        fields.TryGetValue("branch", out var branch);
-        fields.TryGetValue("created_at", out var created);
-        fields.TryGetValue("updated_at", out var updated);
-
-        return new WorkspaceFields(
-            string.IsNullOrWhiteSpace(name) ? null : name,
-            string.Equals(userNamed, "true", StringComparison.OrdinalIgnoreCase),
-            string.IsNullOrWhiteSpace(cwd) ? null : cwd,
-            string.IsNullOrWhiteSpace(repository) ? null : repository,
-            string.IsNullOrWhiteSpace(branch) ? null : branch,
-            string.IsNullOrWhiteSpace(created) ? null : created,
-            string.IsNullOrWhiteSpace(updated) ? null : updated);
-    }
-
-    /// <summary>
-    /// Picks the display name Copilot CLI shows. User-renamed sessions keep their title in
-    /// <c>workspace.yaml</c> (<c>user_named: true</c>) while <c>session-store.db</c>'s
-    /// <c>summary</c> drifts with the latest conversation snippet.
-    /// </summary>
-    private static string ResolveSessionName(string sessionId, string? dbSummary, WorkspaceFields workspace)
-    {
-        if (workspace.UserNamed && !string.IsNullOrWhiteSpace(workspace.Name))
-        {
-            return workspace.Name!;
-        }
-
-        if (IsUsableYamlName(workspace.Name, sessionId))
-        {
-            return workspace.Name!;
-        }
-
-        if (!string.IsNullOrWhiteSpace(dbSummary))
-        {
-            return dbSummary!;
-        }
-
-        if (!string.IsNullOrWhiteSpace(workspace.Name))
-        {
-            return workspace.Name!;
-        }
-
-        return "(unnamed session)";
-    }
-
-    private static bool IsUsableYamlName(string? name, string sessionId)
-    {
-        if (string.IsNullOrWhiteSpace(name) || name == "|-")
-        {
-            return false;
-        }
-
-        var trimmed = name.Trim().Trim('"');
-        if (Guid.TryParse(trimmed, out _))
-        {
-            return false;
-        }
-
-        return !string.Equals(trimmed, sessionId, StringComparison.OrdinalIgnoreCase);
-    }
+    private WorkspaceMetadata ReadWorkspaceYaml(string id) =>
+        WorkspaceYamlReader.ReadFromSessionFolder(_sessionStateDir, id);
 
     private static string? FirstNonEmpty(string? preferred, string? fallback) =>
         !string.IsNullOrWhiteSpace(preferred) ? preferred : fallback;
-
-    private readonly record struct WorkspaceFields(
-        string? Name,
-        bool UserNamed,
-        string? Cwd,
-        string? Repository,
-        string? Branch,
-        string? CreatedAt,
-        string? UpdatedAt);
 
     private static DateTimeOffset? ParseTimestamp(string? value)
     {

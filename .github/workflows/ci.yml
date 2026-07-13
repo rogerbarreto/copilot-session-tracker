@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore CopilotDashboard.sln
+
+      - name: Build app
+        run: dotnet build src/CopilotSessionTracker/CopilotSessionTracker.csproj -c Release -r win-x64 --no-restore --tl:off
+
+      - name: Test
+        run: dotnet test tests/CopilotSessionTracker.Tests/CopilotSessionTracker.Tests.csproj -c Release --verbosity normal

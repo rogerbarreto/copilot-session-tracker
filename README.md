@@ -94,9 +94,19 @@ consistent snapshot without contending with the CLI, the app copies the database
 `FileShare.ReadWrite`), reads from the copy, and deletes it afterwards. It never writes
 to your real session store.
 
+## CI
+
+Pull requests and pushes to `main` run GitHub Actions on `windows-latest`:
+
+- `dotnet build src/CopilotSessionTracker/CopilotSessionTracker.csproj -c Release -r win-x64`
+- `dotnet test tests/CopilotSessionTracker.Tests/CopilotSessionTracker.Tests.csproj -c Release`
+
 ## Project layout
 
 ```text
+src/CopilotSessionTracker.Core/
+  SessionNameResolver.cs     Display-name logic shared with tests
+  WorkspaceYamlReader.cs     Reads flat workspace.yaml metadata
 src/CopilotSessionTracker/
   App.xaml(.cs)              Application entry point
   MainWindow.xaml(.cs)       Session table + Peek dialog
@@ -107,4 +117,7 @@ src/CopilotSessionTracker/
     TerminalLauncher.cs      Runs the configurable command template in a terminal
     AppSettings.cs           Persists the command template (LOCALAPPDATA JSON)
   ViewModels/MainViewModel.cs
+tests/CopilotSessionTracker.Tests/
+  SessionNameResolverTests.cs
+  WorkspaceYamlReaderTests.cs
 ```
