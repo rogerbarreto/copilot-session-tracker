@@ -18,7 +18,8 @@ the app filters them out.
 ## Features
 
 - **Session table** — one row per local session showing:
-  - **Session name** (the CLI "summary"; `(unnamed session)` if none) with the
+  - **Session name** (from `workspace.yaml`, matching what Copilot CLI shows; falls back to
+    the DB `summary` for auto-titled sessions; `(unnamed session)` if none) with the
     **working directory** as a small line beneath it (repository is shown in the tooltip)
   - **Session id** — a short id shown as a clickable link; **click it to copy the full
     GUID to the clipboard** (a brief "Copied!" confirmation appears)

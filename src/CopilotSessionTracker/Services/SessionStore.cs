@@ -166,15 +166,16 @@ public sealed class SessionStore
 
             turnStats.TryGetValue(id, out var stats);
             var summary = reader.IsDBNull(4) ? null : reader.GetString(4);
+            var workspace = ReadWorkspaceYaml(id);
             map[id] = new SessionInfo
             {
                 Id = id,
-                Name = string.IsNullOrWhiteSpace(summary) ? "(unnamed session)" : summary!,
-                WorkingDirectory = reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
-                Repository = reader.IsDBNull(2) ? null : reader.GetString(2),
-                Branch = reader.IsDBNull(3) ? null : reader.GetString(3),
-                CreatedAt = ParseTimestamp(reader.IsDBNull(5) ? null : reader.GetString(5)),
-                UpdatedAt = ParseTimestamp(reader.IsDBNull(6) ? null : reader.GetString(6)),
+                Name = ResolveSessionName(id, summary, workspace),
+                WorkingDirectory = FirstNonEmpty(workspace.Cwd, reader.IsDBNull(1) ? null : reader.GetString(1)) ?? string.Empty,
+                Repository = FirstNonEmpty(workspace.Repository, reader.IsDBNull(2) ? null : reader.GetString(2)),
+                Branch = FirstNonEmpty(workspace.Branch, reader.IsDBNull(3) ? null : reader.GetString(3)),
+                CreatedAt = ParseTimestamp(FirstNonEmpty(workspace.CreatedAt, reader.IsDBNull(5) ? null : reader.GetString(5))),
+                UpdatedAt = ParseTimestamp(FirstNonEmpty(workspace.UpdatedAt, reader.IsDBNull(6) ? null : reader.GetString(6))),
                 LastInteractionAt = stats.LastTimestamp,
                 TurnCount = stats.Count,
             };
@@ -206,6 +207,23 @@ public sealed class SessionStore
 
     private SessionInfo LoadFromWorkspaceYaml(string id)
     {
+        var workspace = ReadWorkspaceYaml(id);
+
+        return new SessionInfo
+        {
+            Id = id,
+            Name = ResolveSessionName(id, dbSummary: null, workspace),
+            WorkingDirectory = workspace.Cwd ?? string.Empty,
+            Repository = string.IsNullOrWhiteSpace(workspace.Repository) ? null : workspace.Repository,
+            Branch = string.IsNullOrWhiteSpace(workspace.Branch) ? null : workspace.Branch,
+            CreatedAt = ParseTimestamp(workspace.CreatedAt),
+            UpdatedAt = ParseTimestamp(workspace.UpdatedAt),
+            TurnCount = 0,
+        };
+    }
+
+    private WorkspaceFields ReadWorkspaceYaml(string id)
+    {
         var yamlPath = Path.Combine(_sessionStateDir, id, "workspace.yaml");
         var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -228,24 +246,81 @@ public sealed class SessionStore
             }
         }
 
+        fields.TryGetValue("name", out var name);
+        fields.TryGetValue("user_named", out var userNamed);
         fields.TryGetValue("cwd", out var cwd);
         fields.TryGetValue("repository", out var repository);
         fields.TryGetValue("branch", out var branch);
         fields.TryGetValue("created_at", out var created);
         fields.TryGetValue("updated_at", out var updated);
 
-        return new SessionInfo
-        {
-            Id = id,
-            Name = "(unnamed session)",
-            WorkingDirectory = cwd ?? string.Empty,
-            Repository = string.IsNullOrWhiteSpace(repository) ? null : repository,
-            Branch = string.IsNullOrWhiteSpace(branch) ? null : branch,
-            CreatedAt = ParseTimestamp(created),
-            UpdatedAt = ParseTimestamp(updated),
-            TurnCount = 0,
-        };
+        return new WorkspaceFields(
+            string.IsNullOrWhiteSpace(name) ? null : name,
+            string.Equals(userNamed, "true", StringComparison.OrdinalIgnoreCase),
+            string.IsNullOrWhiteSpace(cwd) ? null : cwd,
+            string.IsNullOrWhiteSpace(repository) ? null : repository,
+            string.IsNullOrWhiteSpace(branch) ? null : branch,
+            string.IsNullOrWhiteSpace(created) ? null : created,
+            string.IsNullOrWhiteSpace(updated) ? null : updated);
     }
+
+    /// <summary>
+    /// Picks the display name Copilot CLI shows. User-renamed sessions keep their title in
+    /// <c>workspace.yaml</c> (<c>user_named: true</c>) while <c>session-store.db</c>'s
+    /// <c>summary</c> drifts with the latest conversation snippet.
+    /// </summary>
+    private static string ResolveSessionName(string sessionId, string? dbSummary, WorkspaceFields workspace)
+    {
+        if (workspace.UserNamed && !string.IsNullOrWhiteSpace(workspace.Name))
+        {
+            return workspace.Name!;
+        }
+
+        if (IsUsableYamlName(workspace.Name, sessionId))
+        {
+            return workspace.Name!;
+        }
+
+        if (!string.IsNullOrWhiteSpace(dbSummary))
+        {
+            return dbSummary!;
+        }
+
+        if (!string.IsNullOrWhiteSpace(workspace.Name))
+        {
+            return workspace.Name!;
+        }
+
+        return "(unnamed session)";
+    }
+
+    private static bool IsUsableYamlName(string? name, string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name == "|-")
+        {
+            return false;
+        }
+
+        var trimmed = name.Trim().Trim('"');
+        if (Guid.TryParse(trimmed, out _))
+        {
+            return false;
+        }
+
+        return !string.Equals(trimmed, sessionId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? FirstNonEmpty(string? preferred, string? fallback) =>
+        !string.IsNullOrWhiteSpace(preferred) ? preferred : fallback;
+
+    private readonly record struct WorkspaceFields(
+        string? Name,
+        bool UserNamed,
+        string? Cwd,
+        string? Repository,
+        string? Branch,
+        string? CreatedAt,
+        string? UpdatedAt);
 
     private static DateTimeOffset? ParseTimestamp(string? value)
     {
