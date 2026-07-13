@@ -115,8 +115,8 @@ Pull requests and pushes to `main` run GitHub Actions on `windows-latest`:
 
 Releases follow the same pattern as [Copilot Booster](https://github.com/rogerbarreto/copilot-booster):
 validation runs on GitHub-hosted runners; signing and publishing run on your self-hosted
-runner with a manually entered Certum TOTP code (nothing sensitive is stored in the public
-repo).
+runner. Sign in to SimplySign on the runner machine before starting the workflow — the
+pipeline only checks that a code-signing certificate is already available.
 
 ### One-time setup
 
@@ -152,10 +152,9 @@ repo).
    ```
 
 4. The `Release` workflow validates the tag (build + tests).
-5. Open **Actions → Release → Run workflow**:
-   - **tag:** `v1.0.0`
-   - **totp_code:** current 6-digit Certum code from SimplySign
-6. The self-hosted runner publishes, signs the EXE and installer, and creates the GitHub
+5. On the runner machine, sign in to **SimplySign** so the code-signing certificate is active.
+6. Open **Actions → Release → Run workflow** and enter **tag:** `v1.0.0`.
+7. The self-hosted runner publishes, signs the EXE and installer, and creates the GitHub
    Release with:
    - `CopilotSessionTracker-Setup.exe` (signed)
    - `CopilotSessionTracker-win-x64.zip` (signed portable build)
@@ -182,6 +181,6 @@ tests/CopilotSessionTracker.Tests/
 scripts/
   publish.ps1
   build-installer.ps1
-  signing/                   Certum SimplySign + signtool helpers
+  signing/                   Certificate check + signtool helpers
 installer.iss                Inno Setup installer definition
 ```

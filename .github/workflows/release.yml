@@ -9,9 +9,6 @@ on:
       tag:
         description: 'Release tag (e.g. v1.0.0)'
         required: true
-      totp_code:
-        description: 'Certum 6-digit TOTP code for SimplySign'
-        required: true
 
 permissions:
   contents: write
@@ -52,10 +49,9 @@ jobs:
         shell: pwsh
         run: ./scripts/publish.ps1 -OutputDir publish
 
-      - name: Authenticate SimplySign
+      - name: Verify signing certificate
         shell: pwsh
-        run: |
-          ./scripts/signing/Ensure-SimplySignCertificate.ps1 -TotpCode "${{ github.event.inputs.totp_code }}"
+        run: ./scripts/signing/Test-SigningCertificateAvailable.ps1
 
       - name: Sign portable EXE
         shell: pwsh
@@ -113,5 +109,5 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "1. Open **Actions → Release → Run workflow**" >> $GITHUB_STEP_SUMMARY
           echo "2. Enter tag \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "3. Enter the current Certum TOTP code" >> $GITHUB_STEP_SUMMARY
+          echo "3. Ensure SimplySign is signed in on the runner machine" >> $GITHUB_STEP_SUMMARY
           echo "4. The self-hosted runner at \`D:\\actions-runner\` will publish, sign, and upload the release" >> $GITHUB_STEP_SUMMARY
