@@ -120,19 +120,17 @@ repo).
 
 ### One-time setup
 
-1. **Self-hosted runner** at `D:\actions-runner` (currently registered to
-   `copilot-booster-signing` — re-register it to this repo if you want both, use an org
-   runner instead):
+1. **Self-hosted runner** at `D:\actions-runner`, registered to this repo as
+   `copilot-session-tracker`. To register a fresh machine:
 
    ```powershell
    cd D:\actions-runner
-   # Stop the service/interactive runner first, then:
-   .\config.cmd remove
-   .\config.cmd --url https://github.com/rogerbarreto/copilot-session-tracker --token <RUNNER_TOKEN>
+   .\config.cmd --unattended --url https://github.com/rogerbarreto/copilot-session-tracker --token <RUNNER_TOKEN>
    .\run.cmd
    ```
 
    Generate `<RUNNER_TOKEN>` from **Settings → Actions → Runners → New self-hosted runner**.
+   To serve multiple repos from one machine, install a second runner in a separate folder.
 
 2. **Signing machine prerequisites** on that runner host:
    - Certum SimplySign Desktop
