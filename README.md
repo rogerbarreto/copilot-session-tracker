@@ -49,9 +49,15 @@ the app filters them out.
   **last-activity** timestamps, the number of turns, and the **last 5 user → assistant
   round trips**.
 - **Search** box to filter by name, id, working directory or repository.
+- **Ignore working directories** — in the **Settings** dialog you can list working
+  directories (one path per line) whose sessions should be **hidden** from the list. A
+  session is hidden when its working directory equals, or lives under, any listed path.
+  Matching is case-insensitive and tolerant of separator/trailing-slash differences, so
+  you can paste paths however you like. The status line shows how many sessions are
+  currently ignored.
 - **Refresh** to reload after new sessions appear.
 
-Settings (the command template) are stored in
+Settings (the command template and the ignored working directories) are stored in
 `%LOCALAPPDATA%\CopilotSessionTracker\settings.json`.
 
 ## Download
@@ -164,6 +170,7 @@ pipeline only checks that a code-signing certificate is already available.
 ```text
 src/CopilotSessionTracker.Core/
   SessionNameResolver.cs     Display-name logic shared with tests
+  SessionDirectoryFilter.cs  Ignore-list path matching shared with tests
   WorkspaceYamlReader.cs     Reads flat workspace.yaml metadata
 src/CopilotSessionTracker/
   App.xaml(.cs)              Application entry point
@@ -173,10 +180,11 @@ src/CopilotSessionTracker/
     SessionStore.cs          Reads session-state folders + session-store.db
     DatabaseSnapshot.cs      Safe read-only snapshot of the live SQLite DB
     TerminalLauncher.cs      Runs the configurable command template in a terminal
-    AppSettings.cs           Persists the command template (LOCALAPPDATA JSON)
+    AppSettings.cs           Persists command template + ignored dirs (LOCALAPPDATA JSON)
   ViewModels/MainViewModel.cs
 tests/CopilotSessionTracker.Tests/
   SessionNameResolverTests.cs
+  SessionDirectoryFilterTests.cs
   WorkspaceYamlReaderTests.cs
 scripts/
   publish.ps1

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CopilotSessionTracker.Core;
 using CopilotSessionTracker.Models;
 using CopilotSessionTracker.Services;
 
@@ -53,6 +54,23 @@ public sealed partial class MainViewModel : ObservableObject
         _settings.Save();
     }
 
+    /// <summary>
+    /// The working directories whose sessions are hidden, as newline-separated text for the
+    /// Settings editor (one path per line).
+    /// </summary>
+    public string IgnoredDirectoriesText => SessionDirectoryFilter.JoinRoots(_settings.IgnoredWorkingDirectories);
+
+    /// <summary>
+    /// Replaces the ignore list from raw editor text (one path per line), persists it, and
+    /// re-applies the filter so the list updates immediately.
+    /// </summary>
+    public void UpdateIgnoredDirectories(string? rawText)
+    {
+        _settings.IgnoredWorkingDirectories = SessionDirectoryFilter.ParseRoots(rawText).ToList();
+        _settings.Save();
+        ApplyFilter();
+    }
+
     [RelayCommand]
     public async Task RefreshAsync()
     {
@@ -82,12 +100,18 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void ApplyFilter()
     {
+        var ignored = _settings.IgnoredWorkingDirectories;
+        var visible = _all
+            .Where(s => !SessionDirectoryFilter.IsIgnored(s.WorkingDirectory, ignored))
+            .ToList();
+        var hiddenCount = _all.Count - visible.Count;
+
         var query = SearchText?.Trim() ?? string.Empty;
 
-        IEnumerable<SessionInfo> filtered = _all;
+        IEnumerable<SessionInfo> filtered = visible;
         if (query.Length > 0)
         {
-            filtered = _all.Where(s =>
+            filtered = visible.Where(s =>
                 Contains(s.Name, query) ||
                 Contains(s.Id, query) ||
                 Contains(s.WorkingDirectory, query) ||
@@ -95,9 +119,16 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         Sessions = new ObservableCollection<SessionInfo>(filtered);
-        StatusText = _all.Count == 0
-            ? "No local sessions found."
-            : $"{Sessions.Count} of {_all.Count} local session(s)";
+
+        if (_all.Count == 0)
+        {
+            StatusText = "No local sessions found.";
+        }
+        else
+        {
+            var suffix = hiddenCount > 0 ? $" ({hiddenCount} ignored)" : string.Empty;
+            StatusText = $"{Sessions.Count} of {visible.Count} local session(s){suffix}";
+        }
     }
 
     private static bool Contains(string? source, string term) =>

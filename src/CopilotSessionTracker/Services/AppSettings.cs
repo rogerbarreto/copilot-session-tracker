@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
@@ -27,6 +28,14 @@ public sealed class AppSettings
     /// </summary>
     public string CommandTemplate { get; set; } = TerminalLauncher.DefaultCommandTemplate;
 
+    /// <summary>
+    /// Working directories whose sessions are hidden from the list. A session is hidden
+    /// when its working directory equals, or lives under, any entry here. Matching is
+    /// case-insensitive and tolerant of separator/trailing-slash differences
+    /// (see <see cref="Core.SessionDirectoryFilter"/>).
+    /// </summary>
+    public List<string> IgnoredWorkingDirectories { get; set; } = new();
+
     public static AppSettings Load()
     {
         try
@@ -41,6 +50,8 @@ public sealed class AppSettings
                     {
                         loaded.CommandTemplate = TerminalLauncher.DefaultCommandTemplate;
                     }
+
+                    loaded.IgnoredWorkingDirectories ??= new();
 
                     return loaded;
                 }
