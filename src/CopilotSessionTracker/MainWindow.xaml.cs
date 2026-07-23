@@ -142,7 +142,24 @@ public sealed partial class MainWindow : Window
         };
         AutomationProperties.SetName(templateBox, "Terminal command template");
 
-        var panel = new StackPanel { Spacing = 8, MinWidth = 520 };        panel.Children.Add(new TextBlock
+        // AcceptsReturn must be true *before* Text is assigned. With the default
+        // (false), WinUI keeps only the first line of a multi-line value, so reopening
+        // Settings with several ignore roots looks like a single path.
+        var ignoreBox = new TextBox
+        {
+            FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.NoWrap,
+            Height = 120,
+            // WinUI multiline TextBox uses '\r' as its line separator; "\r\n" / '\n'
+            // can still collapse visually even with AcceptsReturn on.
+            Text = ToWinUiMultiline(ViewModel.IgnoredDirectoriesText),
+        };
+        ScrollViewer.SetVerticalScrollBarVisibility(ignoreBox, ScrollBarVisibility.Auto);
+        AutomationProperties.SetName(ignoreBox, "Ignored working directories");
+
+        var panel = new StackPanel { Spacing = 8, MinWidth = 520 };
+        panel.Children.Add(new TextBlock
         {
             Text = "Command run by the Terminal button. Tokens: {id} = session id, "
                  + "{cwd} = working directory. Everything else is passed through verbatim "
@@ -151,6 +168,16 @@ public sealed partial class MainWindow : Window
             Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
         });
         panel.Children.Add(templateBox);
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Ignored working directories (one path per line). Sessions whose working "
+                 + "directory equals or lives under any of these are hidden from the list.",
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 8, 0, 0),
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+        });
+        panel.Children.Add(ignoreBox);
 
         var dialog = new ContentDialog
         {
@@ -177,6 +204,8 @@ public sealed partial class MainWindow : Window
             ViewModel.CommandTemplate = string.IsNullOrEmpty(value)
                 ? TerminalLauncher.DefaultCommandTemplate
                 : value;
+
+            ViewModel.UpdateIgnoredDirectories(ignoreBox.Text);
         }
     }
 
@@ -357,6 +386,15 @@ public sealed partial class MainWindow : Window
 
     private static string Truncate(string value, int max) =>
         value.Length <= max ? value : value[..max] + "…";
+
+    /// <summary>
+    /// WinUI multiline <see cref="TextBox"/> uses <c>'\r'</c> as its line separator.
+    /// Values joined with <see cref="Environment.NewLine"/> (<c>"\r\n"</c>) or bare
+    /// <c>'\n'</c> can display as a single line even when <see cref="TextBox.AcceptsReturn"/>
+    /// is true.
+    /// </summary>
+    private static string ToWinUiMultiline(string? text) =>
+        (text ?? string.Empty).Replace("\r\n", "\r", StringComparison.Ordinal).Replace('\n', '\r');
 
     private async System.Threading.Tasks.Task ShowMessageAsync(string title, string message)
     {
