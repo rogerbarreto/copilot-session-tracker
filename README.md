@@ -148,22 +148,25 @@ pipeline only checks that a code-signing certificate is already available.
 
 ### Release flow
 
-1. Merge to `main`.
-2. Bump `Version` in `src/CopilotSessionTracker/CopilotSessionTracker.csproj` if needed.
+1. Merge to `main` (version already bumped for the next release — currently **1.1.0**).
+2. Confirm `Version` in `src/CopilotSessionTracker/CopilotSessionTracker.csproj` matches
+   the tag you will create (and default `MyAppVersion` in `installer.iss`).
 3. Tag and push:
 
    ```powershell
-   git tag v1.0.0
-   git push origin v1.0.0
+   git tag v1.1.0
+   git push origin v1.1.0
    ```
 
-4. The `Release` workflow validates the tag (build + tests).
+4. The `Release` workflow validates the tag (build + tests on GitHub-hosted runners).
 5. On the runner machine, sign in to **SimplySign** so the code-signing certificate is active.
-6. Open **Actions → Release → Run workflow** and enter **tag:** `v1.0.0`.
+6. Open **Actions → Release → Run workflow** and enter **tag:** `v1.1.0`.
 7. The self-hosted runner publishes, signs the EXE and installer, and creates the GitHub
    Release with:
    - `CopilotSessionTracker-Setup.exe` (signed)
    - `CopilotSessionTracker-win-x64.zip` (signed portable build)
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes per version.
 
 ## Project layout
 
